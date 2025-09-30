@@ -26,9 +26,8 @@ def load_population_data(dong_code, date_str):
     if not supabase_client:
         return pd.DataFrame()
 
-    # 데이터 테이블 이름: Supabase가 한글 테이블 이름을 큰따옴표로 감싸서 저장했을 가능성을 고려하여
-    # '서울시_생활인구_2023'라는 정확한 문자열로 다시 지정 (lower() 삭제)
-    table_name = "서울시_생활인구_2023"
+    # !!! 최종 수정: Supabase에서 확인된 실제 테이블 이름 'population'을 사용 !!!
+    table_name = "population" 
 
     try:
         # Supabase 쿼리 실행: 테이블 이름, 컬럼 이름, 필터링 조건 모두 Supabase와 일치해야 합니다.
@@ -136,4 +135,3 @@ if search_button:
 
     except Exception as e:
         st.error(f"예상치 못한 앱 내부 오류가 발생했습니다: {e}")
-
