@@ -8,13 +8,15 @@ import altair as alt # Altair 차트 라이브러리 임포트 (streamlit_chartj
 # @st.cache_resource를 사용하여 앱이 실행되는 동안 단 한 번만 연결을 초기화합니다.
 @st.cache_resource
 def init_connection():
-    # Streamlit Secrets (secrets.toml 또는 Cloud Secrets)에서 정보를 안전하게 가져옴
+    # Streamlit Secrets에서 단일 레벨 변수 이름을 읽습니다.
     try:
-        url: str = st.secrets["supabase"]["url"]
-        key: str = st.secrets["supabase"]["key"]
+        # Secrets 텍스트 박스에 SUPABASE_URL과 SUPABASE_KEY가 직접 정의되어 있다고 가정
+        url: str = st.secrets["SUPABASE_URL"]
+        key: str = st.secrets["SUPABASE_KEY"]
         return create_client(url, key)
     except KeyError:
-        st.error("Error: Could not find Supabase connection secrets. Please check your secrets.toml or Streamlit Cloud Secrets settings.")
+        # 오류 메시지를 수정하여 사용자에게 필요한 변수 이름을 알려줍니다.
+        st.error("Error: Could not find Supabase connection secrets. Please ensure SUPABASE_URL and SUPABASE_KEY are set directly in your Streamlit Cloud Secrets.")
         return None
 
 # 전역 Supabase 클라이언트 생성
@@ -135,6 +137,9 @@ if search_button:
             st.markdown("---")
             st.caption("Raw Data (First 5 Rows)")
             st.dataframe(df_result.head())
+
+    except Exception as e:
+        st.error(f"예상치 못한 오류가 발생했습니다: {e}")
 
     except Exception as e:
         st.error(f"예상치 못한 오류가 발생했습니다: {e}")
