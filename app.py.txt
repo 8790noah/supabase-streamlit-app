@@ -1,0 +1,7 @@
+# app.py
+import streamlit as st
+import pandas as pd
+# from supabase import create_client, Client # 나중에 Supabase 접속에 사용됩니다.
+
+st.title("여의도 인구 분석 앱 📊")
+st.write("Streamlit 앱이 정상적으로 실행되는지 테스트하는 페이지입니다.")
