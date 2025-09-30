@@ -18,7 +18,7 @@ def init_connection():
 # 전역 Supabase 클라이언트 생성
 supabase_client = init_connection()
 
-# --- 2. 행정동 목록 로딩 함수 (행정동코드만 사용) ---
+# --- 2. 행정동 목록 로딩 함수 (컬럼 이름: dong_code) ---
 @st.cache_data(ttl=3600) # 1시간마다 새로고침
 def load_dong_list():
     if not supabase_client:
@@ -27,10 +27,10 @@ def load_dong_list():
     table_name = "population"
     
     try:
-        # 데이터베이스에서 고유한 '행정동코드' 목록만 조회합니다.
+        # 데이터베이스에서 고유한 'dong_code' 목록만 조회합니다. (영문 소문자 가정)
         response = (
             supabase_client.table(table_name)
-            .select("행정동코드")
+            .select("dong_code") # << 컬럼 이름 수정
             .limit(100000)
             .execute()
         )
@@ -42,16 +42,17 @@ def load_dong_list():
         df = pd.DataFrame(data)
         
         # 중복된 코드를 제거하고 문자열로 변환하여 리스트를 만듭니다.
-        dong_codes = df['행정동코드'].drop_duplicates().astype(str).sort_values().tolist()
+        # 컬럼 이름이 'dong_code'라고 가정합니다.
+        dong_codes = df['dong_code'].drop_duplicates().astype(str).sort_values().tolist()
         
         return dong_codes
         
     except Exception as e:
-        # 목록 로딩 실패 시 발생하는 오류 (테이블 이름 불일치 등)
-        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블 이름(population)과 컬럼 이름(행정동코드)을 확인해주세요. (세부 오류: {e})")
+        # 목록 로딩 실패 시 발생하는 오류를 출력
+        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블 이름(population) 또는 컬럼 이름(dong_code)을 확인해주세요. (세부 오류: {e})")
         return []
 
-# --- 3. 데이터 조회 함수 ---
+# --- 3. 데이터 조회 함수 (컬럼 이름: hour, total_population, dong_code, date) ---
 def load_population_data(dong_code_str, date_str):
     if not supabase_client:
         return pd.DataFrame()
@@ -59,14 +60,13 @@ def load_population_data(dong_code_str, date_str):
     table_name = "population" 
 
     try:
-        # 컬럼 이름이 소문자로 변환되었다고 가정하고 쿼리합니다.
-        # 주의: 모든 컬럼 이름은 데이터베이스에 실제 저장된 이름(대소문자 포함)과 일치해야 합니다.
+        # 영문 컬럼 이름으로 쿼리합니다.
         response = (
             supabase_client.table(table_name)
-            .select("시간대, 총생활인구수, 행정동코드, 날짜")
-            .eq("행정동코드", dong_code_str) # 문자열로 비교
-            .eq("날짜", date_str)
-            .order("시간대")
+            .select("hour, total_population") # << 컬럼 이름 수정
+            .eq("dong_code", dong_code_str) # << 컬럼 이름 수정
+            .eq("date", date_str) # << 컬럼 이름 수정 (날짜 컬럼이 'date'라고 가정)
+            .order("hour") # << 컬럼 이름 수정
             .execute()
         )
         
@@ -74,15 +74,15 @@ def load_population_data(dong_code_str, date_str):
         if not data:
             return pd.DataFrame()
         
-        # 조회된 JSON 데이터를 Pandas DataFrame으로 변환
         df = pd.DataFrame(data)
         
-        # 시각화에 필요한 컬럼만 추출하여 반환
-        return df[['시간대', '총생활인구수']]
+        # 시각화 함수에 맞춰서 컬럼 이름 변경 (차트 UI에 한글로 표시하기 위함)
+        df.columns = ['시간대', '총생활인구수'] 
+        return df
     
     except Exception as e:
         st.error(f"⚠️ 데이터베이스 쿼리 오류 발생: Supabase 응답에 문제가 있습니다. (세부 오류: {e})")
-        st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 필터링 컬럼='행정동코드, 날짜'")
+        st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 필터링 컬럼='dong_code, date'")
         return pd.DataFrame()
 
 # --- 4. Streamlit 앱 인터페이스 ---
@@ -102,12 +102,12 @@ with st.sidebar:
         selected_dong_code_str = st.selectbox(
             "행정동 코드 선택",
             options=dong_codes,
-            index=dong_codes.index('1156064000') if '1156064000' in dong_codes else 0, # 여의동을 기본값으로 시도
+            index=dong_codes.index('1156064000') if '1156064000' in dong_codes else 0,
             key='dong_select'
         )
     else:
         st.error("행정동 코드 목록 로드에 실패했습니다. 위의 오류 메시지를 확인하세요.")
-        selected_dong_code_str = '1156064000' # 기본값 설정
+        selected_dong_code_str = '1156064000' # 기본값 설정 (선택할 목록이 없을 때)
 
     # 4-2. 날짜 선택 필드
     selected_date = st.date_input(
@@ -125,12 +125,10 @@ with st.sidebar:
 # --- 5. 조회 실행 로직 및 시각화 ---
 
 if search_button and selected_dong_code_str:
-    # 데이터 조회 시작
     try:
         with st.spinner(f"행정동코드 **{selected_dong_code_str}**의 **{date_str}** 데이터 조회 중..."):
             df_result = load_population_data(selected_dong_code_str, date_str)
 
-        # 조회 결과 확인
         if df_result.empty:
             st.error(f"🔍 해당 행정동(코드: {selected_dong_code_str})의 {date_str} 데이터가 Supabase에 없습니다. 조건을 다시 확인해주세요.")
         else:
