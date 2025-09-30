@@ -107,7 +107,6 @@ if search_button:
 
         # 조회 결과 확인
         if df_result.empty:
-            # 이 메시지는 테이블 이름이 맞지만, 입력한 코드/날짜에 데이터가 없을 때 뜹니다.
             st.error(f"🔍 해당 행정동(코드: {dong_code})의 {date_str} 데이터가 Supabase에 없습니다. 조건을 다시 확인해주세요.")
         else:
             st.success(f"✅ 데이터 조회 완료: {date_str} 기준, 24개 시간대 데이터 ({df_result['총생활인구수'].sum():,.0f} 명)")
@@ -136,6 +135,3 @@ if search_button:
 
     except Exception as e:
         st.error(f"예상치 못한 앱 내부 오류가 발생했습니다: {e}")
-```eof
-
-**GitHub에 이 코드를 커밋한 후,** 앱을 재시작하고 **데이터가 확실히 존재하는 행정동 코드와 날짜**를 입력하여 최종 확인해 보세요! 모든 오류를 극복하고 완성에 도달하셨습니다! 👍
