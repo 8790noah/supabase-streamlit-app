@@ -25,7 +25,7 @@ def load_population_data(dong_code, date_str):
     if not supabase_client:
         return pd.DataFrame()
 
-    # 데이터 테이블 이름: 사용자가 업로드한 CSV 파일 이름과 동일하게 가정
+    # 데이터 테이블 이름: Supabase에 업로드된 테이블 이름과 동일해야 합니다.
     table_name = "서울시_생활인구_2023"
 
     try:
@@ -51,8 +51,9 @@ def load_population_data(dong_code, date_str):
         return df
     
     except Exception as e:
-        # st.error(f"Database Query Error: {e}")
         st.error("데이터베이스 조회 중 오류가 발생했습니다. 테이블 이름('서울시_생활인구_2023') 또는 컬럼 이름이 Supabase와 일치하는지 확인해 주세요.")
+        # 디버깅을 위해 콘솔에 전체 에러 메시지를 출력합니다.
+        # print(f"Supabase query error: {e}") 
         return pd.DataFrame()
 
 # --- 3. Streamlit 앱 인터페이스 ---
@@ -157,32 +158,4 @@ if search_button:
             st.dataframe(df_result.head())
 
     except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
-
-
-eof
-
-
-
-## 다음 단계: GitHub 푸시 및 배포
-
-이제 코드를 작성했으니, 다음 단계를 진행할 차례입니다.
-
-1.  **`app.py`와 `requirements.txt` 저장:** VS Code에서 파일을 저장합니다. (Ctrl+S 또는 Command+S)
-2.  **`requirements.txt` 확인:** `supabase`와 `streamlit_chartjs`가 추가되었는지 최종 확인합니다.
-
-    ```txt
-    # requirements.txt
-    streamlit
-    supabase
-    pandas
-    streamlit_chartjs
-    ```
-
-3.  **GitHub에 푸시:** 명령 프롬프트를 열고 다음 명령어를 순서대로 실행하여 변경된 코드를 GitHub에 업로드합니다.
-
-    ```bash
-    git add .
-    git commit -m "Implement Supabase query and Chart.js visualization"
-    git push
-    
+        st.error(f"예상치 못한 오류가 발생했습니다: {e}")
