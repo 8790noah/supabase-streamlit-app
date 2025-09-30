@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-from streamlit_chartjs import chartjs # Chart.js 렌더링을 위한 라이브러리 임포트
+import altair as alt # Altair 차트 라이브러리 임포트 (streamlit_chartjs 대신 사용)
 
 # --- 1. Supabase 연결 설정 ---
 # @st.cache_resource를 사용하여 앱이 실행되는 동안 단 한 번만 연결을 초기화합니다.
@@ -114,45 +114,23 @@ if search_button:
         else:
             st.success(f"✅ 데이터 조회 완료: {date_str} 기준, 24개 시간대 데이터 ({df_result['총생활인구수'].sum():,.0f} 명)")
             
-            # --- 5. Chart.js 시각화 (요구사항) ---
+            # --- 5. Altair 시각화 ---
             st.subheader(f"시간대별 총생활인구수 추이 ({date_str})")
             
-            # Chart.js에 전달할 JSON 데이터 구조 정의
-            chart_config = {
-                "type": "line", # 꺾은선 그래프 (Line Chart)
-                "data": {
-                    # X축 (시간대: 0시부터 23시)
-                    "labels": df_result['시간대'].tolist(), 
-                    "datasets": [
-                        {
-                            "label": "총생활인구수 (명)",
-                            "data": df_result['총생활인구수'].tolist(), 
-                            "backgroundColor": "rgba(75, 192, 192, 0.4)",
-                            "borderColor": "rgba(75, 192, 192, 1)",
-                            "borderWidth": 3,
-                            "pointRadius": 5,
-                            "fill": False, # 선 아래를 채우지 않음
-                            "tension": 0.4 # 곡선 처리
-                        }
-                    ]
-                },
-                "options": {
-                    "responsive": True,
-                    "maintainAspectRatio": False,
-                    "plugins": {
-                        "legend": {"position": "top"},
-                        "title": {"display": True, "text": f"행정동 코드: {dong_code_str}"}
-                    },
-                    "scales": {
-                        "x": {"title": {"display": True, "text": "시간대 (Hour)", "font": {"size": 14}}},
-                        "y": {"title": {"display": True, "text": "총생활인구수 (명)", "font": {"size": 14}}}
-                    }
-                }
-            }
+            # Altair 차트 생성
+            chart = alt.Chart(df_result).mark_line(point=True).encode(
+                # X축: 시간대 (순서대로 정렬)
+                x=alt.X('시간대', title='시간대 (Hour)', scale=alt.Scale(domain=[0, 23])),
+                # Y축: 총생활인구수
+                y=alt.Y('총생활인구수', title='총생활인구수 (명)'),
+                # 툴팁 설정
+                tooltip=['시간대', alt.Tooltip('총생활인구수', format=',.0f')]
+            ).properties(
+                title=f"행정동 코드: {dong_code_str} ({date_str})"
+            ).interactive() # 확대/축소 기능 활성화
             
-            # chartjs 함수를 사용하여 차트 렌더링
-            # height를 지정하여 차트 크기 조정
-            chartjs(chart_config, height=500) 
+            # Streamlit에 차트 표시
+            st.altair_chart(chart, use_container_width=True) 
             
             st.markdown("---")
             st.caption("Raw Data (First 5 Rows)")
