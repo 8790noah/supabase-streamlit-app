@@ -32,10 +32,7 @@ def load_population_data(dong_code, date_str):
     table_name = "서울시_생활인구_2023"
 
     try:
-        # Supabase 쿼리: 
-        # 1. '행정동코드'와 '날짜'가 일치하는 데이터 필터링
-        # 2. '시간대'와 '총생활인구수' 컬럼만 선택
-        # 3. '시간대'를 기준으로 오름차순 정렬 (0시부터 23시까지 순서대로)
+        # Supabase 쿼리 실행
         response = (
             supabase_client.table(table_name)
             .select("시간대, 총생활인구수")
@@ -54,9 +51,9 @@ def load_population_data(dong_code, date_str):
         return df
     
     except Exception as e:
-        st.error("데이터베이스 조회 중 오류가 발생했습니다. 테이블 이름('서울시_생활인구_2023') 또는 컬럼 이름이 Supabase와 일치하는지 확인해 주세요.")
-        # 디버깅을 위해 콘솔에 전체 에러 메시지를 출력합니다.
-        # print(f"Supabase query error: {e}") 
+        # 오류 발생 시 더 구체적인 메시지를 출력하도록 수정
+        st.error(f"⚠️ 데이터베이스 쿼리 오류 발생: Supabase 응답에 문제가 있습니다. (세부 오류: {e})")
+        st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 컬럼='시간대, 총생활인구수, 행정동코드, 날짜'")
         return pd.DataFrame()
 
 # --- 3. Streamlit 앱 인터페이스 ---
@@ -66,6 +63,7 @@ st.markdown("특정 **행정동**과 **날짜**를 선택하여 하루 동안의
 
 # 사이드바를 이용한 입력 UI
 with st.sidebar:
+# ... (중략 - UI 부분은 동일)
     st.header("🔍 조회 조건 설정")
     
     # 3-1. 행정동코드 입력 필드 (Supabase 테이블의 데이터 타입에 따라 문자열로 처리)
@@ -139,7 +137,5 @@ if search_button:
             st.dataframe(df_result.head())
 
     except Exception as e:
-        st.error(f"예상치 못한 오류가 발생했습니다: {e}")
-
-    except Exception as e:
-        st.error(f"예상치 못한 오류가 발생했습니다: {e}")
+        # 이쪽 Exception은 버튼 클릭 후 유효성 검사나 int() 변환 등에서 발생할 수 있는 오류를 잡습니다.
+        st.error(f"예상치 못한 앱 내부 오류가 발생했습니다: {e}")
