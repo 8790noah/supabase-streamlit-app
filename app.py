@@ -159,10 +159,10 @@ if search_button:
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
-```
+
 eof
 
----
+
 
 ## 다음 단계: GitHub 푸시 및 배포
 
