@@ -18,44 +18,38 @@ def init_connection():
 # 전역 Supabase 클라이언트 생성
 supabase_client = init_connection()
 
-# --- 2. 행정동 목록 로딩 함수 ---
+# --- 2. 행정동 목록 로딩 함수 (행정동코드만 사용) ---
 @st.cache_data(ttl=3600) # 1시간마다 새로고침
 def load_dong_list():
     if not supabase_client:
-        return {}
+        return []
     
     table_name = "population"
     
     try:
-        # population 테이블에서 고유한 행정동코드와 행정동명 목록을 조회
+        # 데이터베이스에서 고유한 '행정동코드' 목록만 조회합니다.
         response = (
             supabase_client.table(table_name)
-            .select("행정동코드, 행정동명")
-            .limit(100000) # 충분한 양의 데이터를 가져와서 중복 제거
+            .select("행정동코드")
+            .limit(100000)
             .execute()
         )
         
         data = response.data
         if not data:
-            return {}
+            return []
         
         df = pd.DataFrame(data)
         
-        # 행정동코드별 행정동명만 남기고 중복 제거
-        # 최종적으로 { '행정동명 (코드)': 코드 } 형태의 딕셔너리를 만듭니다.
-        df_unique = df[['행정동코드', '행정동명']].drop_duplicates().sort_values(by='행정동코드')
+        # 중복된 코드를 제거하고 문자열로 변환하여 리스트를 만듭니다.
+        dong_codes = df['행정동코드'].drop_duplicates().astype(str).sort_values().tolist()
         
-        # 사용자에게 보여줄 레이블과 실제 값(코드)을 매핑합니다.
-        dong_map = {
-            f"{row['행정동명']} ({row['행정동코드']})": str(row['행정동코드']) 
-            for index, row in df_unique.iterrows()
-        }
-        
-        return dong_map
+        return dong_codes
         
     except Exception as e:
-        st.error(f"⚠️ 행정동 목록 로딩 중 오류 발생. 컬럼 이름(행정동코드, 행정동명)을 확인해주세요. (세부 오류: {e})")
-        return {}
+        # 목록 로딩 실패 시 발생하는 오류 (테이블 이름 불일치 등)
+        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블 이름(population)과 컬럼 이름(행정동코드)을 확인해주세요. (세부 오류: {e})")
+        return []
 
 # --- 3. 데이터 조회 함수 ---
 def load_population_data(dong_code_str, date_str):
@@ -66,6 +60,7 @@ def load_population_data(dong_code_str, date_str):
 
     try:
         # 컬럼 이름이 소문자로 변환되었다고 가정하고 쿼리합니다.
+        # 주의: 모든 컬럼 이름은 데이터베이스에 실제 저장된 이름(대소문자 포함)과 일치해야 합니다.
         response = (
             supabase_client.table(table_name)
             .select("시간대, 총생활인구수, 행정동코드, 날짜")
@@ -82,15 +77,10 @@ def load_population_data(dong_code_str, date_str):
         # 조회된 JSON 데이터를 Pandas DataFrame으로 변환
         df = pd.DataFrame(data)
         
-        # 컬럼 이름이 한글로 되어 있을 경우 소문자로 변환되었을 가능성을 대비
-        # 데이터프레임의 컬럼 이름을 통일합니다. (이 부분은 데이터에 따라 수정 필요)
-        df.columns = df.columns.str.lower()
-        
-        # 시각화에 필요한 컬럼만 추출하여 반환 (모두 소문자로 가정)
+        # 시각화에 필요한 컬럼만 추출하여 반환
         return df[['시간대', '총생활인구수']]
     
     except Exception as e:
-        # 오류 발생 시 더 구체적인 메시지를 출력
         st.error(f"⚠️ 데이터베이스 쿼리 오류 발생: Supabase 응답에 문제가 있습니다. (세부 오류: {e})")
         st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 필터링 컬럼='행정동코드, 날짜'")
         return pd.DataFrame()
@@ -98,33 +88,27 @@ def load_population_data(dong_code_str, date_str):
 # --- 4. Streamlit 앱 인터페이스 ---
 st.set_page_config(layout="wide")
 st.title("📊 서울시 시간대별 생활인구 추이 분석")
-st.markdown("특정 **행정동**과 **날짜**를 선택하여 하루 동안의 **총생활인구수** 변화를 꺾은선 그래프로 확인하세요.")
+st.markdown("특정 **행정동 코드**와 **날짜**를 선택하여 하루 동안의 **총생활인구수** 변화를 꺾은선 그래프로 확인하세요.")
 
 # 행정동 목록 미리 로드
-dong_list = load_dong_list()
-dong_options = list(dong_list.keys())
+dong_codes = load_dong_list()
 
 # 사이드바를 이용한 입력 UI
 with st.sidebar:
     st.header("🔍 조회 조건 설정")
     
-    # 4-1. 행정동코드 드롭다운 메뉴로 변경
-    if dong_options:
-        selected_dong_label = st.selectbox(
-            "행정동 선택",
-            options=dong_options,
-            index=dong_options.index('여의동 (1156064000)') if '여의동 (1156064000)' in dong_options else 0,
+    # 4-1. 행정동코드 드롭다운 메뉴
+    if dong_codes:
+        selected_dong_code_str = st.selectbox(
+            "행정동 코드 선택",
+            options=dong_codes,
+            index=dong_codes.index('1156064000') if '1156064000' in dong_codes else 0, # 여의동을 기본값으로 시도
             key='dong_select'
         )
-        # 선택된 레이블에서 실제 행정동 코드(value)를 추출
-        selected_dong_code_str = dong_list.get(selected_dong_label)
-        
     else:
-        # 목록 로드 실패 시 임시로 텍스트 입력 박스 유지 (디버깅용)
-        st.error("행정동 목록 로드 실패. Supabase 컬럼 이름(행정동코드, 행정동명)을 확인하세요.")
-        selected_dong_code_str = st.text_input("행정동코드 (예: 1156064000)", placeholder="1156064000")
-    
-    
+        st.error("행정동 코드 목록 로드에 실패했습니다. 위의 오류 메시지를 확인하세요.")
+        selected_dong_code_str = '1156064000' # 기본값 설정
+
     # 4-2. 날짜 선택 필드
     selected_date = st.date_input(
         "조회 날짜 선택", 
@@ -140,16 +124,10 @@ with st.sidebar:
 
 # --- 5. 조회 실행 로직 및 시각화 ---
 
-if search_button:
-    # 요구사항 1: 입력값 유효성 검사
-    if not selected_dong_code_str or not date_str:
-        st.warning("⚠️ **올바른 값을 선택해주세요.** 행정동과 날짜를 모두 선택해야 합니다.")
-        st.stop()
-    
+if search_button and selected_dong_code_str:
     # 데이터 조회 시작
     try:
         with st.spinner(f"행정동코드 **{selected_dong_code_str}**의 **{date_str}** 데이터 조회 중..."):
-            # selected_dong_code_str은 이미 문자열입니다.
             df_result = load_population_data(selected_dong_code_str, date_str)
 
         # 조회 결과 확인
@@ -166,7 +144,7 @@ if search_button:
                 y=alt.Y('총생활인구수', title='총생활인구수 (명)'),
                 tooltip=['시간대', alt.Tooltip('총생활인구수', format=',.0f')]
             ).properties(
-                title=f"행정동: {selected_dong_label} ({date_str})"
+                title=f"행정동 코드: {selected_dong_code_str} ({date_str})"
             ).interactive()
             
             st.altair_chart(chart, use_container_width=True) 
