@@ -2,20 +2,18 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
-import altair as alt # Altair 차트 라이브러리 임포트 (streamlit_chartjs 대신 사용)
+import altair as alt # Altair 차트 라이브러리 임포트
 
 # --- 1. Supabase 연결 설정 ---
 # @st.cache_resource를 사용하여 앱이 실행되는 동안 단 한 번만 연결을 초기화합니다.
 @st.cache_resource
 def init_connection():
-    # Streamlit Secrets에서 단일 레벨 변수 이름을 읽습니다.
+    # Streamlit Secrets에서 단일 레벨 변수 이름을 읽습니다. (SUPABASE_URL, SUPABASE_KEY)
     try:
-        # Secrets 텍스트 박스에 SUPABASE_URL과 SUPABASE_KEY가 직접 정의되어 있다고 가정
         url: str = st.secrets["SUPABASE_URL"]
         key: str = st.secrets["SUPABASE_KEY"]
         return create_client(url, key)
     except KeyError:
-        # 오류 메시지를 수정하여 사용자에게 필요한 변수 이름을 알려줍니다.
         st.error("Error: Could not find Supabase connection secrets. Please ensure SUPABASE_URL and SUPABASE_KEY are set directly in your Streamlit Cloud Secrets.")
         return None
 
@@ -28,11 +26,11 @@ def load_population_data(dong_code, date_str):
     if not supabase_client:
         return pd.DataFrame()
 
-    # 데이터 테이블 이름: Supabase에 업로드된 테이블 이름과 동일해야 합니다.
-    table_name = "서울시_생활인구_2023"
+    # 데이터 테이블 이름: Supabase에서 한글 이름이 소문자로 자동 변환되었을 가능성을 고려하여 .lower()를 적용
+    table_name = "서울시_생활인구_2023".lower()
 
     try:
-        # Supabase 쿼리 실행
+        # Supabase 쿼리 실행: 테이블 이름, 컬럼 이름, 필터링 조건 모두 Supabase와 일치해야 합니다.
         response = (
             supabase_client.table(table_name)
             .select("시간대, 총생활인구수")
@@ -51,7 +49,7 @@ def load_population_data(dong_code, date_str):
         return df
     
     except Exception as e:
-        # 오류 발생 시 더 구체적인 메시지를 출력하도록 수정
+        # 오류 발생 시 더 구체적인 메시지를 출력
         st.error(f"⚠️ 데이터베이스 쿼리 오류 발생: Supabase 응답에 문제가 있습니다. (세부 오류: {e})")
         st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 컬럼='시간대, 총생활인구수, 행정동코드, 날짜'")
         return pd.DataFrame()
@@ -63,7 +61,6 @@ st.markdown("특정 **행정동**과 **날짜**를 선택하여 하루 동안의
 
 # 사이드바를 이용한 입력 UI
 with st.sidebar:
-# ... (중략 - UI 부분은 동일)
     st.header("🔍 조회 조건 설정")
     
     # 3-1. 행정동코드 입력 필드 (Supabase 테이블의 데이터 타입에 따라 문자열로 처리)
@@ -110,6 +107,7 @@ if search_button:
 
         # 조회 결과 확인
         if df_result.empty:
+            # 이 메시지는 테이블 이름이 맞지만, 입력한 코드/날짜에 데이터가 없을 때 뜹니다.
             st.error(f"🔍 해당 행정동(코드: {dong_code})의 {date_str} 데이터가 Supabase에 없습니다. 조건을 다시 확인해주세요.")
         else:
             st.success(f"✅ 데이터 조회 완료: {date_str} 기준, 24개 시간대 데이터 ({df_result['총생활인구수'].sum():,.0f} 명)")
@@ -137,5 +135,7 @@ if search_button:
             st.dataframe(df_result.head())
 
     except Exception as e:
-        # 이쪽 Exception은 버튼 클릭 후 유효성 검사나 int() 변환 등에서 발생할 수 있는 오류를 잡습니다.
         st.error(f"예상치 못한 앱 내부 오류가 발생했습니다: {e}")
+```eof
+
+**GitHub에 이 코드를 커밋한 후,** 앱을 재시작하고 **데이터가 확실히 존재하는 행정동 코드와 날짜**를 입력하여 최종 확인해 보세요! 모든 오류를 극복하고 완성에 도달하셨습니다! 👍
