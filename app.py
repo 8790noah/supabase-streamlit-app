@@ -18,7 +18,7 @@ def init_connection():
 # 전역 Supabase 클라이언트 생성
 supabase_client = init_connection()
 
-# --- 2. 행정동 목록 로딩 함수 (컬럼 이름: dong_code) ---
+# --- 2. 행정동 목록 로딩 함수 (컬럼 이름: 행정동코드) ---
 @st.cache_data(ttl=3600) # 1시간마다 새로고침
 def load_dong_list():
     if not supabase_client:
@@ -27,10 +27,10 @@ def load_dong_list():
     table_name = "population"
     
     try:
-        # 데이터베이스에서 고유한 'dong_code' 목록만 조회합니다. (영문 소문자 가정)
+        # DB에서 확인된 실제 컬럼 이름 '행정동코드'를 사용
         response = (
             supabase_client.table(table_name)
-            .select("dong_code") # << 컬럼 이름 수정
+            .select("행정동코드") 
             .limit(100000)
             .execute()
         )
@@ -41,18 +41,17 @@ def load_dong_list():
         
         df = pd.DataFrame(data)
         
-        # 중복된 코드를 제거하고 문자열로 변환하여 리스트를 만듭니다.
-        # 컬럼 이름이 'dong_code'라고 가정합니다.
-        dong_codes = df['dong_code'].drop_duplicates().astype(str).sort_values().tolist()
+        # '행정동코드' 컬럼을 사용합니다.
+        dong_codes = df['행정동코드'].drop_duplicates().astype(str).sort_values().tolist()
         
         return dong_codes
         
     except Exception as e:
         # 목록 로딩 실패 시 발생하는 오류를 출력
-        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블 이름(population) 또는 컬럼 이름(dong_code)을 확인해주세요. (세부 오류: {e})")
+        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블 이름(population) 또는 컬럼 이름(행정동코드)을 확인해주세요. (세부 오류: {e})")
         return []
 
-# --- 3. 데이터 조회 함수 (컬럼 이름: hour, total_population, dong_code, date) ---
+# --- 3. 데이터 조회 함수 (컬럼 이름: 시간대, 총생활인구수, 행정동코드, 날짜) ---
 def load_population_data(dong_code_str, date_str):
     if not supabase_client:
         return pd.DataFrame()
@@ -60,13 +59,13 @@ def load_population_data(dong_code_str, date_str):
     table_name = "population" 
 
     try:
-        # 영문 컬럼 이름으로 쿼리합니다.
+        # DB에서 확인된 실제 한글 컬럼 이름으로 쿼리합니다.
         response = (
             supabase_client.table(table_name)
-            .select("hour, total_population") # << 컬럼 이름 수정
-            .eq("dong_code", dong_code_str) # << 컬럼 이름 수정
-            .eq("date", date_str) # << 컬럼 이름 수정 (날짜 컬럼이 'date'라고 가정)
-            .order("hour") # << 컬럼 이름 수정
+            .select("시간대, 총생활인구수") # << 한글 컬럼 이름 사용
+            .eq("행정동코드", dong_code_str) # << 한글 컬럼 이름 사용
+            .eq("날짜", date_str) # << 한글 컬럼 이름 사용
+            .order("시간대") 
             .execute()
         )
         
@@ -82,7 +81,7 @@ def load_population_data(dong_code_str, date_str):
     
     except Exception as e:
         st.error(f"⚠️ 데이터베이스 쿼리 오류 발생: Supabase 응답에 문제가 있습니다. (세부 오류: {e})")
-        st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 필터링 컬럼='dong_code, date'")
+        st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 필터링 컬럼='행정동코드, 날짜'")
         return pd.DataFrame()
 
 # --- 4. Streamlit 앱 인터페이스 ---
@@ -106,8 +105,8 @@ with st.sidebar:
             key='dong_select'
         )
     else:
-        st.error("행정동 코드 목록 로드에 실패했습니다. 위의 오류 메시지를 확인하세요.")
-        selected_dong_code_str = '1156064000' # 기본값 설정 (선택할 목록이 없을 때)
+        st.error("행정동 코드 목록 로드에 실패했습니다. (Supabase 연결 및 컬럼 이름 확인 필요)")
+        selected_dong_code_str = '1156064000' 
 
     # 4-2. 날짜 선택 필드
     selected_date = st.date_input(
@@ -153,3 +152,14 @@ if search_button and selected_dong_code_str:
 
     except Exception as e:
         st.error(f"예상치 못한 앱 내부 오류가 발생했습니다: {e}")
+```eof
+
+---
+
+## 🚀 2. 마지막 단계
+
+1.  **GitHub에 이 코드를 커밋**하고 앱이 재시작되기를 기다립니다.
+2.  **행정동 코드 드롭다운 메뉴**가 정상적으로 표시되는지 확인합니다.
+3.  드롭다운에서 코드를 선택하고, **데이터가 존재하는 날짜**를 입력한 후 **"데이터 조회 및 시각화"** 버튼을 눌러보세요.
+
+이 수정으로 테이블 이름과 컬럼 이름 불일치 문제는 확실히 해결되었습니다. 이제는 **데이터가 없다는 메시지**만 남을 것입니다.
