@@ -18,7 +18,7 @@ def init_connection():
 # 전역 Supabase 클라이언트 생성
 supabase_client = init_connection()
 
-# --- 2. 행정동 목록 로딩 함수 (컬럼 이름: 행정동코드) ---
+# --- 2. 행정동 목록 로딩 함수 (컬럼 이름: 행정동코드, 고유값 쿼리 적용) ---
 @st.cache_data(ttl=3600) # 1시간마다 새로고침
 def load_dong_list():
     if not supabase_client:
@@ -28,10 +28,10 @@ def load_dong_list():
     
     try:
         # DB 이미지에서 확인된 실제 컬럼 이름 '행정동코드'를 사용
+        # DISTINCT 쿼리를 사용하여 대용량 데이터 로딩 속도를 개선합니다.
         response = (
             supabase_client.table(table_name)
-            .select("행정동코드") 
-            .limit(100000)
+            .select("행정동코드", options={"distinct": True}) 
             .execute()
         )
         
@@ -41,14 +41,14 @@ def load_dong_list():
         
         df = pd.DataFrame(data)
         
-        # '행정동코드' 컬럼을 사용합니다.
-        dong_codes = df['행정동코드'].drop_duplicates().astype(str).sort_values().tolist()
+        # '행정동코드' 컬럼을 문자열로 변환하여 리스트를 만듭니다.
+        dong_codes = df['행정동코드'].astype(str).sort_values().tolist()
         
         return dong_codes
         
     except Exception as e:
-        # 목록 로딩 실패 시 발생하는 오류를 출력
-        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블 이름(population) 또는 컬럼 이름(행정동코드)을 확인해주세요. (세부 오류: {e})")
+        # 목록 로딩 실패 시 발생하는 오류를 출력 (디버깅용)
+        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블(population) 또는 컬럼(행정동코드) 확인. (세부 오류: {e})")
         return []
 
 # --- 3. 데이터 조회 함수 (컬럼 이름: 시간대, 총생활인구수, 행정동코드, 날짜) ---
@@ -62,9 +62,9 @@ def load_population_data(dong_code_str, date_str):
         # DB에서 확인된 실제 한글 컬럼 이름으로 쿼리합니다.
         response = (
             supabase_client.table(table_name)
-            .select("시간대, 총생활인구수") # 한글 컬럼 이름 사용
-            .eq("행정동코드", dong_code_str) # 한글 컬럼 이름 사용
-            .eq("날짜", date_str) # 한글 컬럼 이름 사용
+            .select("시간대, 총생활인구수")
+            .eq("행정동코드", dong_code_str)
+            .eq("날짜", date_str)
             .order("시간대") 
             .execute()
         )
@@ -75,7 +75,7 @@ def load_population_data(dong_code_str, date_str):
         
         df = pd.DataFrame(data)
         
-        # 시각화 함수에 맞춰서 컬럼 이름 변경 (차트 UI에 한글로 표시하기 위함)
+        # 시각화 함수에 맞춰서 컬럼 이름 변경 
         df.columns = ['시간대', '총생활인구수'] 
         return df
     
@@ -101,14 +101,14 @@ with st.sidebar:
         selected_dong_code_str = st.selectbox(
             "행정동 코드 선택",
             options=dong_codes,
-            # 기본값 설정: 목록에 '1156064000'이 있으면 선택, 없으면 첫 번째 항목 선택
-            index=dong_codes.index('1156064000') if '1156064000' in dong_codes else 0,
+            # 목록이 로드되면 첫 번째 항목을 기본값으로 선택
+            index=0, 
             key='dong_select'
         )
     else:
-        # 이전에 발생했던 오류가 다시 발생했을 때 출력되는 메시지
-        st.error("행정동 코드 목록 로드에 실패했습니다. (Supabase 연결 및 컬럼 이름 확인 필요)")
-        selected_dong_code_str = '1156064000' 
+        # 목록 로드 실패 시 디버깅을 위해 입력 필드를 유지하고 오류 메시지를 띄웁니다.
+        st.error("행정동 코드 목록 로드 실패. 위의 세부 오류 메시지를 확인하세요.")
+        selected_dong_code_str = st.text_input("행정동 코드 수동 입력", value='1156064000')
 
     # 4-2. 날짜 선택 필드
     selected_date = st.date_input(
@@ -125,12 +125,17 @@ with st.sidebar:
 
 # --- 5. 조회 실행 로직 및 시각화 ---
 
-if search_button and selected_dong_code_str:
+if search_button:
+    if not selected_dong_code_str:
+        st.warning("⚠️ 조회할 행정동 코드를 입력하거나 선택해 주세요.")
+        st.stop()
+        
     try:
         with st.spinner(f"행정동코드 **{selected_dong_code_str}**의 **{date_str}** 데이터 조회 중..."):
             df_result = load_population_data(selected_dong_code_str, date_str)
 
         if df_result.empty:
+            # 이 메시지가 뜬다면, 이제 쿼리는 성공했지만, 데이터베이스에 해당 조합의 데이터가 없는 것입니다.
             st.error(f"🔍 해당 행정동(코드: {selected_dong_code_str})의 {date_str} 데이터가 Supabase에 없습니다. 조건을 다시 확인해주세요.")
         else:
             st.success(f"✅ 데이터 조회 완료: {date_str} 기준, 24개 시간대 데이터 ({df_result['총생활인구수'].sum():,.0f} 명)")
