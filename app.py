@@ -27,7 +27,7 @@ def load_dong_list():
     table_name = "population"
     
     try:
-        # DB에서 확인된 실제 컬럼 이름 '행정동코드'를 사용
+        # DB 이미지에서 확인된 실제 컬럼 이름 '행정동코드'를 사용
         response = (
             supabase_client.table(table_name)
             .select("행정동코드") 
@@ -62,9 +62,9 @@ def load_population_data(dong_code_str, date_str):
         # DB에서 확인된 실제 한글 컬럼 이름으로 쿼리합니다.
         response = (
             supabase_client.table(table_name)
-            .select("시간대, 총생활인구수") # << 한글 컬럼 이름 사용
-            .eq("행정동코드", dong_code_str) # << 한글 컬럼 이름 사용
-            .eq("날짜", date_str) # << 한글 컬럼 이름 사용
+            .select("시간대, 총생활인구수") # 한글 컬럼 이름 사용
+            .eq("행정동코드", dong_code_str) # 한글 컬럼 이름 사용
+            .eq("날짜", date_str) # 한글 컬럼 이름 사용
             .order("시간대") 
             .execute()
         )
@@ -101,10 +101,12 @@ with st.sidebar:
         selected_dong_code_str = st.selectbox(
             "행정동 코드 선택",
             options=dong_codes,
+            # 기본값 설정: 목록에 '1156064000'이 있으면 선택, 없으면 첫 번째 항목 선택
             index=dong_codes.index('1156064000') if '1156064000' in dong_codes else 0,
             key='dong_select'
         )
     else:
+        # 이전에 발생했던 오류가 다시 발생했을 때 출력되는 메시지
         st.error("행정동 코드 목록 로드에 실패했습니다. (Supabase 연결 및 컬럼 이름 확인 필요)")
         selected_dong_code_str = '1156064000' 
 
@@ -152,14 +154,3 @@ if search_button and selected_dong_code_str:
 
     except Exception as e:
         st.error(f"예상치 못한 앱 내부 오류가 발생했습니다: {e}")
-```eof
-
----
-
-## 🚀 2. 마지막 단계
-
-1.  **GitHub에 이 코드를 커밋**하고 앱이 재시작되기를 기다립니다.
-2.  **행정동 코드 드롭다운 메뉴**가 정상적으로 표시되는지 확인합니다.
-3.  드롭다운에서 코드를 선택하고, **데이터가 존재하는 날짜**를 입력한 후 **"데이터 조회 및 시각화"** 버튼을 눌러보세요.
-
-이 수정으로 테이블 이름과 컬럼 이름 불일치 문제는 확실히 해결되었습니다. 이제는 **데이터가 없다는 메시지**만 남을 것입니다.
