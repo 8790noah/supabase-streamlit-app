@@ -18,21 +18,27 @@ def init_connection():
 # 전역 Supabase 클라이언트 생성
 supabase_client = init_connection()
 
-# --- 2. 행정동 목록 로딩 함수 (Python 메모리 중복 제거 사용) ---
+# PostgreSQL에서 큰따옴표를 사용하여 한글 컬럼 이름을 명시적으로 지정
+# 이 방식은 Supabase가 한글 컬럼을 저장한 방식과 일치하도록 강제합니다.
+DONG_CODE_COL = '"행정동코드"'
+TIME_COL = '"시간대"'
+POPULATION_COL = '"총생활인구수"'
+DATE_COL = '"날짜"'
+TABLE_NAME = "population"
+
+
+# --- 2. 행정동 목록 로딩 함수 (PostgreSQL 강제 명시 적용) ---
 @st.cache_data(ttl=3600) # 1시간마다 새로고침
 def load_dong_list():
     if not supabase_client:
         return []
     
-    table_name = "population"
-    
     try:
-        # **[최종 수정]** 라이브러리 오류를 피하기 위해, 단순 쿼리 후 pandas로 중복을 제거합니다.
-        # 시간이 오래 걸릴 수 있지만, 현재 환경에서 유일하게 작동하는 방법입니다.
+        # **[핵심 수정]** 큰따옴표로 컬럼 이름을 감싸 PostgreSQL 규칙을 따름
         response = (
-            supabase_client.table(table_name)
-            .select("행정동코드") 
-            .execute() # LIMIT나 DISTINCT 없이 전체 컬럼을 가져옴
+            supabase_client.table(TABLE_NAME)
+            .select(DONG_CODE_COL) 
+            .execute()
         )
         
         data = response.data
@@ -41,31 +47,32 @@ def load_dong_list():
         
         df = pd.DataFrame(data)
         
-        # Python(Pandas)에서 중복을 제거하고 문자열로 변환하여 리스트를 만듭니다.
-        dong_codes = df['행정동코드'].drop_duplicates().astype(str).sort_values().tolist()
+        # DataFrame 컬럼 이름도 큰따옴표가 포함된 이름으로 접근해야 함
+        df[DONG_CODE_COL] = df[DONG_CODE_COL].astype(str).str.strip()
+        
+        # 목록을 만들 때는 따옴표 없는 순수 코드만 사용
+        dong_codes = df[DONG_CODE_COL].drop_duplicates().sort_values().tolist()
         
         return dong_codes
         
     except Exception as e:
         # 목록 로딩 실패 시 발생하는 오류를 출력 (디버깅용)
-        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블(population) 또는 컬럼(행정동코드) 확인. (세부 오류: {e})")
+        st.error(f"⚠️ 행정동 코드 목록 로딩 중 오류 발생. 테이블({TABLE_NAME}) 또는 컬럼({DONG_CODE_COL}) 확인. (세부 오류: {e})")
         return []
 
-# --- 3. 데이터 조회 함수 (컬럼 이름: 시간대, 총생활인구수, 행정동코드, 날짜) ---
+# --- 3. 데이터 조회 함수 (PostgreSQL 강제 명시 적용) ---
 def load_population_data(dong_code_str, date_str):
     if not supabase_client:
         return pd.DataFrame()
 
-    table_name = "population" 
-
     try:
-        # DB에서 확인된 실제 한글 컬럼 이름으로 쿼리합니다.
+        # **[핵심 수정]** 큰따옴표로 컬럼 이름을 감싸 쿼리
         response = (
-            supabase_client.table(table_name)
-            .select("시간대, 총생활인구수")
-            .eq("행정동코드", dong_code_str)
-            .eq("날짜", date_str)
-            .order("시간대") 
+            supabase_client.table(TABLE_NAME)
+            .select(f"{TIME_COL}, {POPULATION_COL}")
+            .eq(DONG_CODE_COL, dong_code_str)
+            .eq(DATE_COL, date_str)
+            .order(TIME_COL) 
             .execute()
         )
         
@@ -75,13 +82,13 @@ def load_population_data(dong_code_str, date_str):
         
         df = pd.DataFrame(data)
         
-        # 시각화 함수에 맞춰서 컬럼 이름 변경 
+        # DataFrame 컬럼 이름을 깨끗하게 한글로 바꿔서 시각화에 사용
         df.columns = ['시간대', '총생활인구수'] 
         return df
     
     except Exception as e:
         st.error(f"⚠️ 데이터베이스 쿼리 오류 발생: Supabase 응답에 문제가 있습니다. (세부 오류: {e})")
-        st.warning(f"💡 현재 쿼리 조건: 테이블='{table_name}', 필터링 컬럼='행정동코드, 날짜'")
+        st.warning(f"💡 현재 쿼리 조건: 테이블='{TABLE_NAME}', 필터링 컬럼='{DONG_CODE_COL}, {DATE_COL}'")
         return pd.DataFrame()
 
 # --- 4. Streamlit 앱 인터페이스 ---
@@ -101,13 +108,10 @@ with st.sidebar:
         selected_dong_code_str = st.selectbox(
             "행정동 코드 선택",
             options=dong_codes,
-            # 목록이 로드되면 첫 번째 항목을 기본값으로 선택
             index=0, 
             key='dong_select'
         )
     else:
-        # 목록 로드 실패 시 디버깅을 위해 입력 필드를 유지하고 오류 메시지를 띄웁니다.
-        # 세부 오류는 load_dong_list 함수에서 이미 출력됩니다.
         st.error("행정동 코드 목록 로드 실패. 위의 세부 오류 메시지를 확인하세요.")
         selected_dong_code_str = st.text_input("행정동 코드 수동 입력", value='1156064000')
 
