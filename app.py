@@ -27,11 +27,11 @@ def load_dong_list():
     table_name = "population"
     
     try:
-        # DB 이미지에서 확인된 실제 컬럼 이름 '행정동코드'를 사용
-        # DISTINCT 쿼리를 사용하여 대용량 데이터 로딩 속도를 개선합니다.
+        # **[핵심 수정]** options={"distinct": True} 대신 .distinct("행정동코드") 메서드를 사용합니다.
         response = (
             supabase_client.table(table_name)
-            .select("행정동코드", options={"distinct": True}) 
+            .select("행정동코드") 
+            .distinct("행정동코드") # 올바른 DISTINCT 쿼리 방식
             .execute()
         )
         
