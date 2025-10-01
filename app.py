@@ -18,7 +18,7 @@ def init_connection():
 # 전역 Supabase 클라이언트 생성
 supabase_client = init_connection()
 
-# --- 2. 행정동 목록 로딩 함수 (컬럼 이름: 행정동코드, 고유값 쿼리 적용) ---
+# --- 2. 행정동 목록 로딩 함수 (Python 메모리 중복 제거 사용) ---
 @st.cache_data(ttl=3600) # 1시간마다 새로고침
 def load_dong_list():
     if not supabase_client:
@@ -27,12 +27,12 @@ def load_dong_list():
     table_name = "population"
     
     try:
-        # **[핵심 수정]** options={"distinct": True} 대신 .distinct("행정동코드") 메서드를 사용합니다.
+        # **[최종 수정]** 라이브러리 오류를 피하기 위해, 단순 쿼리 후 pandas로 중복을 제거합니다.
+        # 시간이 오래 걸릴 수 있지만, 현재 환경에서 유일하게 작동하는 방법입니다.
         response = (
             supabase_client.table(table_name)
             .select("행정동코드") 
-            .distinct("행정동코드") # 올바른 DISTINCT 쿼리 방식
-            .execute()
+            .execute() # LIMIT나 DISTINCT 없이 전체 컬럼을 가져옴
         )
         
         data = response.data
@@ -41,8 +41,8 @@ def load_dong_list():
         
         df = pd.DataFrame(data)
         
-        # '행정동코드' 컬럼을 문자열로 변환하여 리스트를 만듭니다.
-        dong_codes = df['행정동코드'].astype(str).sort_values().tolist()
+        # Python(Pandas)에서 중복을 제거하고 문자열로 변환하여 리스트를 만듭니다.
+        dong_codes = df['행정동코드'].drop_duplicates().astype(str).sort_values().tolist()
         
         return dong_codes
         
@@ -107,6 +107,7 @@ with st.sidebar:
         )
     else:
         # 목록 로드 실패 시 디버깅을 위해 입력 필드를 유지하고 오류 메시지를 띄웁니다.
+        # 세부 오류는 load_dong_list 함수에서 이미 출력됩니다.
         st.error("행정동 코드 목록 로드 실패. 위의 세부 오류 메시지를 확인하세요.")
         selected_dong_code_str = st.text_input("행정동 코드 수동 입력", value='1156064000')
 
@@ -135,7 +136,6 @@ if search_button:
             df_result = load_population_data(selected_dong_code_str, date_str)
 
         if df_result.empty:
-            # 이 메시지가 뜬다면, 이제 쿼리는 성공했지만, 데이터베이스에 해당 조합의 데이터가 없는 것입니다.
             st.error(f"🔍 해당 행정동(코드: {selected_dong_code_str})의 {date_str} 데이터가 Supabase에 없습니다. 조건을 다시 확인해주세요.")
         else:
             st.success(f"✅ 데이터 조회 완료: {date_str} 기준, 24개 시간대 데이터 ({df_result['총생활인구수'].sum():,.0f} 명)")
